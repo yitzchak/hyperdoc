@@ -417,4 +417,10 @@ returned."
   :base-uri "http://franz.com/support/documentation/current/doc/"
   :relative-uri-function 'relative-uri-for-franz-doc)
 
+(register-documentation :mop
+  :base-uri "http://franz.com/support/documentation/current/doc/mop/dictionary.html"
+  :relative-uri-function #'(lambda (symbol type)
+			     (declare (ignore type))
+			     (format nil "#~A" (symbol-name symbol))))
+
 ) ; #+allegro (progn ...
