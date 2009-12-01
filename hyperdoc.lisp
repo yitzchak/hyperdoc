@@ -21,7 +21,8 @@
 
 (defpackage :hyperdoc
   (:use :cl)
-  (:export 
+  (:export
+   #:register-documentation
    #:lookup
    #:base-uri
    #:generate-index
@@ -29,6 +30,9 @@
    ))
 
 (in-package :hyperdoc)
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (pushnew :hyperdoc *features*))
 
 ;;;; Utility functions
 
@@ -50,7 +54,7 @@ symbol doesn't exist or is not fbound."
 	(symbol-function symbol)
 	nil)))
 
-(defun merge-uris (relative base)
+(defun merge-uris (base relative)
   "Merges RELATIVE to BASE."
   ;; Yuck. This is so WRONG.
   (concatenate 'string base relative))
@@ -61,6 +65,12 @@ symbol doesn't exist or is not fbound."
     (string package)
     (symbol (symbol-name package))
     (package (package-name package))))
+
+(defun gethash-multiple-keys (keys hashtable)
+  (loop for key in keys do (multiple-value-bind (value foundp)
+			       (gethash key hashtable)
+			     (when foundp
+			       (return (values value foundp))))))
 
 (defun hash-alist (hash)
   "Returns an alist corresponding to the HASH."
@@ -76,6 +86,40 @@ symbol doesn't exist or is not fbound."
     (dolist (x alist)
       (setf (gethash (car x) hash) (cdr x)))
     hash))
+
+(defun ensure-list (thing)
+  (if (listp thing) thing (list thing)))
+
+;; from swank.lisp
+(defun package-names (package)
+  "Return the name and all nicknames of PACKAGE in a fresh list."
+  (cons (package-name package) (copy-list (package-nicknames package))))
+
+;; adapted from swank.lisp
+(defun classify-symbol (symbol)
+  "Returns a list of classifiers that classify SYMBOL according to its
+underneath objects (e.g. :BOUNDP if SYMBOL constitutes a special
+variable.) The list may contain the following classification
+keywords: :VARIABLE, :FUNCTION, :CONSTANT, :GENERIC-FUNCTION,
+:TYPE, :CLASS, :MACRO, :SPECIAL-OPERATOR, and/or :PACKAGE"
+  (check-type symbol symbol)
+  (flet ((type-specifier-p (s) (documentation s 'type)))
+    (let (result)
+      (when (boundp symbol)             (push (if (constantp symbol) 
+						  :constant 
+						  :variable) 
+					      result))
+      (when (fboundp symbol)            (push :function result))
+      (when (type-specifier-p symbol)   (push :type result))
+      (when (find-class symbol nil)     (push :class result))
+      (when (macro-function symbol)     (push :macro result))
+      (when (special-operator-p symbol) (push :special-operator result))
+      (when (find-package symbol)       (push :package result))
+      (when (typep (ignore-errors (fdefinition symbol))
+                   'generic-function)
+        (push :generic-function result))
+
+      result)))
 
 ;;;; Varaibles
 
@@ -98,22 +142,42 @@ loaded -- or at least lazily on first call to X.")
   "Herald printed in the beginning of the index file to discourage tampering.")
 
 (defparameter *documentation-types* 
-  (list "T" "SYMBOL-MACRO" "MACRO" "CONDITION" "METHOD"
-	"GENERIC-FUNCTION" "CLASS" "TYPE" "FUNCTION" "COMPILER-MACRO" "SETF"
-	"METHOD-COMBINATION" "TYPE" "STRUCTURE"
-	"VARIABLE" "CONSTANT")
-  "Names string of documentation types used by Hyperdoc. These
-correspond to what DOCUMENTATION uses with a few additions.")
+  (list t :symbol-macro :macro :condition :method
+	:generic-function :class :type :function :compiler-macro :setf
+	:method-combination :type :structure :package
+	:variable :constant)
+  "Documentation types used by Hyperdoc. These correspond to what
+DOCUMENTATION uses with a few additions.")
 
 (defvar *base-uris* (make-hash-table :test #'equal)
   "Holds the locally defined base-uris of various packages. Accessed via BASE-URI and (SETF BASE-URI).")
+
+;;; We don't use packages themselves as key so people can register
+;;; documentation for stuff that may be loaded on-demand. (E.g.
+;;; implementation's contribs.)
+(defvar *documentation-registry* (make-hash-table :test 'equal)
+  "Mapping from package name (possibly nickname) to documentation data.")
+
+(defun register-documentation (packages &rest keys &key base-uri
+			                                relative-uri-function
+                                                        extra-types-function)
+  (check-type packages (or string symbol package cons))
+  (check-type base-uri string)
+  (check-type relative-uri-function (or symbol function))
+  (check-type extra-types-function  (or null symbol function))
+  (loop for package-name in (mapcar #'package-string (ensure-list packages)) do
+        (let ((entry (gethash package-name *documentation-registry*)))
+          (when entry
+            (warn "Overwriting hyperdoc documentation entry for package ~S:~%~
+                   Old entry: ~S~%New entry: ~S~%" package-name entry keys)))
+        (setf (gethash package-name *documentation-registry*) keys)))
 
 ;;;; The meat and the bones
 
 (defun base-uri (package)
   "Base URI for hyperdocs for package."
   (or (gethash (package-string package) *base-uris*)
-      (find-value "*HYPERDOC-BASE-URI*" package)
+      (find-value "" package)
       (error "No base URI for package ~A." (package-string package))))
 
 (defun (setf base-uri) (uri package)
@@ -133,25 +197,72 @@ If the package supports Hyperdoc, but no doc-type is given and there
 are multiple matches, a list of applicable (doc-type . uri-string)
 pairs is returned -- if only single doc-type matches just the URI is
 returned."
-  (let* ((package (find-package package-designator))
+  (let* ((doc-types (ensure-list doc-type))
+	 (package (find-package package-designator))
 	 (uris
-	  (or (if package 
-		  (introspective-lookup (intern symbol-name package) doc-type)
-		  (index-lookup (package-string package-designator) 
-				symbol-name doc-type))
-	      (hyperspec:lookup symbol-name))))
+	  (if package
+	      ;; N.B. package locks.
+	      (let ((symbol (ignore-errors (intern symbol-name package))))
+		(and symbol (introspective-lookup symbol  doc-types)))
+              (static-lookup (package-string package-designator) 
+                            symbol-name doc-types))))
     (if (and (listp uris) (null (cdr uris)))
 	(cdr (first uris))
 	uris)))
 
-(defun introspective-lookup (symbol &optional doc-type)
+(defun introspective-lookup (symbol &optional doc-types)
   "Looks up hyperdocumentation for the symbol in the current image."
-  (let ((base-uri (base-uri (symbol-package symbol))))
-    (mapcar (lambda (pair)
-	      (cons (car pair) (merge-uris (cdr pair) base-uri)))
-	    (%lookup symbol doc-type))))
+  (setq doc-types (or doc-types *documentation-types*))
+  (multiple-value-bind (base-uri relative-uri-function extra-types-function)
+      (documentation-data-for-package (symbol-package symbol))
+    (when base-uri
+      (remove-duplicates
+       (loop for type in (union (intersection doc-types (classify-symbol symbol))
+				(and extra-types-function
+				     (funcall extra-types-function symbol)))
+	     collect (cons type (merge-uris base-uri
+					    (funcall relative-uri-function
+						     symbol type))))
+       :test #'string= :key #'cdr))))
 
-(defun index-lookup (package-name symbol-name doc-type)
+;;; Don't we all love Allegro's modern mode?
+(defparameter +hyperdoc-base-uri+
+  (string '#:*hyperdoc-base-uri*))
+(defparameter +hyperdoc-lookup+
+  (string '#:hyperdoc-lookup))
+(defparameter +hyperdoc-documentation-types+
+  (string '#:*hyperdoc-documentation-types*))
+
+(defun documentation-data-for-package (package)
+  (flet ((retrieve-from-interning (package)
+	   ;; for backwards-compatibility
+           (let ((base-uri (find-value +hyperdoc-base-uri+ package))
+                 (lookup   (find-function +hyperdoc-documentation-types+ package))
+                 (types    (find-value +hyperdoc-documentation-types+ package)))
+             (when (and base-uri lookup)
+               (values base-uri lookup types))))
+         (retrieve-from-registry (package)
+           (destructuring-bind (&key relative-uri-function 
+				     base-uri 
+				     extra-types-function)
+               (gethash-multiple-keys (package-names package) 
+				      *documentation-registry*)
+             (when relative-uri-function
+               (assert base-uri)
+               (values base-uri relative-uri-function extra-types-function)))))
+    (multiple-value-bind (base fn types) (retrieve-from-interning package)
+      (unless base
+        (multiple-value-setq (base fn types) (retrieve-from-registry package)))
+      (values base fn types))))
+
+;; #+hyperdoc
+;; (hyperdoc::register-documentation '(:cffi :cffi-sys)
+;;  :base-uri "http://common-lisp.net/project/cffi/manual/html_node/"
+;;  :lookup-function 'hyperdoc::merge-uris-for-texinfo-html)
+
+;;;; Static indexes
+
+(defun static-lookup (package-name symbol-name doc-type)
   "Looks up hyperdocumentation for the symbol in the pregenerated indices."
   (unless *index*
     (setf *index* (read-index)))
@@ -165,25 +276,14 @@ returned."
 		  (assoc doc-type uris)
 		  uris)))))
 
-(defun %lookup (symbol &optional doc-type)
-  "Primitive for introspective hyperdoc lookup. Doesn't merge the uris."
-  (let* ((package (symbol-package symbol))
-	 (lookup (find-symbol "HYPERDOC-LOOKUP" package)))
-    (when lookup
-      (remove-duplicates (mapcan (lambda (type)
-				   (let ((uri (funcall lookup symbol type)))
-				     (when uri 
-				       (list (cons type uri)))))
-				 (if doc-type
-				     (list doc-type)
-				     (all-documentation-types package)))
-			 :test #'string=
-			 :key #'cdr))))
+(defclass index ()
+  ((names :accessor name-table
+	  :initform (make-hash-table :test #'equal))
+   (base-uris :accessor base-uri-table
+	      :initform (make-hash-table :test #'equal))
+   (package-tables :accessor package-table
+		   :initform (make-hash-table :test #'equal))))
 
-(defun all-documentation-types (package)
-  (union *documentation-types* 
-	 (find-symbol "*HYPERDOC-DOCUMENTATION-TYPES*" package)
-	 :test #'string=))
 
 (defun name-index-pathname ()
   (merge-pathnames "names.sexp" *index-directory*))
@@ -192,16 +292,6 @@ returned."
   (merge-pathnames (make-pathname :name (package-string package) 
 				  :type "sexp" )
 		   (merge-pathnames "packages/" *index-directory*)))
-
-;;;; Static indexes
-
-(defclass index ()
-  ((names :accessor name-table
-	  :initform (make-hash-table :test #'equal))
-   (base-uris :accessor base-uri-table
-	      :initform (make-hash-table :test #'equal))
-   (package-tables :accessor package-table
-		   :initform (make-hash-table :test #'equal))))
 
 (defun generate-index (package-designator)
   "Generate Hyperdoc index for the designated package."
@@ -287,11 +377,44 @@ returned."
 	     (name-table index))
     index))
 
-;;;; Introspection
 
-(defvar *hyperdoc-base-uri* "http://common-lisp.net/project/hyperdoc/doc/")
+;;;; Pre-registered documentations
 
-(defun hyperdoc-lookup (symbol doc-type)
-  (declare (ignore doc-type))
-  #+nil 
-  (concatenate 'string "index.html#" (string-downcase (symbol-name symbol))))
+#+allegro
+(progn
+
+(defvar *allegro-doc-packages*
+  '("common-graphics" "compiler" "composer"
+    "dbi" "defsys"
+    "excl"
+    "ff"
+    "javatools.jil" "javatools.jlinker"
+    "mp"
+    "net.post-office" "net.rpc" "net.uri"
+    "prof"
+    "socket" "system"
+    "top-level"
+    "util.test"
+    "xref"))
+
+(defun relative-uri-for-franz-doc (symbol type)
+  (let ((kind (case type
+		((:function :generic-function :macro) "operators")
+		((:variable :constant)                "variables")
+		((:class)                             "classes")
+		(t (return-from relative-uri-for-franz-doc nil))))
+	(package 
+	 (loop for pkg-name in (package-names (symbol-package symbol))
+	       thereis (find pkg-name *allegro-doc-packages*
+			     :test #'string-equal)))
+	(symbol
+	 (excl:replace-regexp (excl:replace-regexp (symbol-name symbol) 
+						   "^\\*" "s_")
+			      "\\*$" "_s")))
+    (format nil "~A/~A/~A.htm" kind package symbol)))
+
+(register-documentation *allegro-doc-packages*
+  :base-uri "http://franz.com/support/documentation/current/doc/"
+  :relative-uri-function 'relative-uri-for-franz-doc)
+
+) ; #+allegro (progn ...

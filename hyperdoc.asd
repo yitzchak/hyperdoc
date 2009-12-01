@@ -25,7 +25,7 @@
 (in-package :hyperdoc-system)
 
 (defsystem :hyperdoc
-    :depends-on (:hyperspec-lookup)
+;    :depends-on (:hyperspec-lookup)
     :components ((:file "hyperdoc")))
 
 (defsystem :hyperdoc-test
