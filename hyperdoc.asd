@@ -1,3 +1,5 @@
+;; -*- Mode:Lisp -*-
+;;
 ;; Copyright (c) 2003 Nikodemus Siivola
 
 ;; Permission is hereby granted, free of charge, to any person obtaining
@@ -25,8 +27,9 @@
 (in-package :hyperdoc-system)
 
 (defsystem :hyperdoc
-;    :depends-on (:hyperspec-lookup)
-    :components ((:file "hyperdoc")))
+    :serial t
+    :components ((:file "hyperdoc")
+		 (:file "registry")))
 
 (defsystem :hyperdoc-test
     :depends-on (:rt)
