@@ -158,19 +158,49 @@ DOCUMENTATION uses with a few additions.")
 (defvar *documentation-registry* (make-hash-table :test 'equal)
   "Mapping from package name (possibly nickname) to documentation data.")
 
+(defun parse-register-documentation-keys (keys)
+  (flet ((being (type value)
+	   (assert (typep value type) 
+		   (value)
+		   "~S is not of type ~S." value type)
+	   value))
+    (loop for (key value) on keys by #'cddr
+	  if (eq key :base-uri) 
+	    collect (being 'string value) into base-uris
+	  else if (eq key :relative-uri-function) 
+            collect (being '(or symbol function) value) into relative-uri-functions
+	  else if (eq key :extra-types-function)
+	    collect (being '(or null symbol function) value) into extra-types-functions
+	  else 
+	    do (error "Unknown REGISTER-DOCUMENTATION key ~S." key)
+	  finally (assert (= (length relative-uri-functions) (length base-uris)) ()
+			  ":RELATIVE-URI-FUNCTION and :BASE-URI must come in pair.")
+		  (return (values base-uris
+				  relative-uri-functions
+				  extra-types-functions)))))
+
 (defun register-documentation (packages &rest keys &key base-uri
 			                                relative-uri-function
-                                                        extra-types-function)
+                                                        extra-types-function
+			       &allow-other-keys)
+  (declare (ignore base-uri relative-uri-function extra-types-function))
   (check-type packages (or string symbol package cons))
-  (check-type base-uri string)
-  (check-type relative-uri-function (or symbol function))
-  (check-type extra-types-function  (or null symbol function))
-  (loop for package-name in (mapcar #'package-string (ensure-list packages)) do
-        (let ((entry (gethash package-name *documentation-registry*)))
-          (when entry
-            (warn "Overwriting hyperdoc documentation entry for package ~S:~%~
-                   Old entry: ~S~%New entry: ~S~%" package-name entry keys)))
-        (setf (gethash package-name *documentation-registry*) keys)))
+  (multiple-value-bind (base-uris relative-uri-functions extra-types-functions)
+      (parse-register-documentation-keys keys)
+    (let ((package-names (mapcar #'package-string (ensure-list packages)))
+	  (docdata 
+	   (loop for b = (pop base-uris)
+		 for r = (pop relative-uri-functions)
+		 for e = (pop extra-types-functions)
+		 while b collect (list :base-uri b
+				       :relative-uri-function r
+				       :extra-types-function e))))
+      (loop for package-name in package-names do
+	(let ((entry (gethash package-name *documentation-registry*)))
+	  (when entry
+	    (warn "Overwriting hyperdoc documentation entry for package ~S:~%~
+                   Old entry: ~S~%New entry: ~S~%" package-name entry keys))
+	  (setf (gethash package-name *documentation-registry*) docdata))))))
 
 ;;;; The meat and the bones
 
@@ -213,17 +243,20 @@ returned."
 (defun introspective-lookup (symbol &optional doc-types)
   "Looks up hyperdocumentation for the symbol in the current image."
   (setq doc-types (or doc-types *documentation-types*))
-  (multiple-value-bind (base-uri relative-uri-function extra-types-function)
-      (documentation-data-for-package (symbol-package symbol))
-    (when base-uri
-      (remove-duplicates
-       (loop for type in (union (intersection doc-types (classify-symbol symbol))
-				(and extra-types-function
-				     (funcall extra-types-function symbol)))
-	     collect (cons type (merge-uris base-uri
-					    (funcall relative-uri-function
-						     symbol type))))
-       :test #'string= :key #'cdr))))
+  (flet ((lookup (base-uri relative-uri-function extra-types-function)
+	   (loop for type in (union (intersection doc-types (classify-symbol symbol))
+				    (and extra-types-function
+					 (funcall extra-types-function symbol)))
+		 for relative-uri = (funcall relative-uri-function symbol type)
+		 when relative-uri
+		   collect (cons type (merge-uris base-uri relative-uri)))))
+    (loop for entry in (documentation-entries-for-package (symbol-package symbol))
+	  thereis (destructuring-bind (&key base-uri 
+				       relative-uri-function 
+				       extra-types-function) entry
+		    (remove-duplicates (lookup base-uri relative-uri-function
+					       extra-types-function)
+				       :test #'string= :key #'cdr)))))
 
 ;;; Don't we all love Allegro's modern mode?
 (defparameter +hyperdoc-base-uri+
@@ -233,27 +266,19 @@ returned."
 (defparameter +hyperdoc-documentation-types+
   (string '#:*hyperdoc-documentation-types*))
 
-(defun documentation-data-for-package (package)
+(defun documentation-entries-for-package (package)
   (flet ((retrieve-from-interning (package)
 	   ;; for backwards-compatibility
            (let ((base-uri (find-value +hyperdoc-base-uri+ package))
                  (lookup   (find-function +hyperdoc-documentation-types+ package))
-                 (types    (find-value +hyperdoc-documentation-types+ package)))
+                 ; (types    (find-value +hyperdoc-documentation-types+ package))
+		 )
              (when (and base-uri lookup)
-               (values base-uri lookup types))))
+	       (list (list :base-uri base-uri :relative-uri-function lookup)))))
          (retrieve-from-registry (package)
-           (destructuring-bind (&key relative-uri-function 
-				     base-uri 
-				     extra-types-function)
-               (gethash-multiple-keys (package-names package) 
-				      *documentation-registry*)
-             (when relative-uri-function
-               (assert base-uri)
-               (values base-uri relative-uri-function extra-types-function)))))
-    (multiple-value-bind (base fn types) (retrieve-from-interning package)
-      (unless base
-        (multiple-value-setq (base fn types) (retrieve-from-registry package)))
-      (values base fn types))))
+           (gethash-multiple-keys (package-names package) *documentation-registry*)))
+    (append (retrieve-from-interning package)
+	    (retrieve-from-registry package))))
 
 ;; #+hyperdoc
 ;; (hyperdoc::register-documentation '(:cffi :cffi-sys)
