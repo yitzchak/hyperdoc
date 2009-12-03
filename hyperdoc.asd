@@ -27,13 +27,17 @@
 (in-package :hyperdoc-system)
 
 (defsystem :hyperdoc
-    :serial t
-    :components ((:file "hyperdoc")
-		 (:file "registry")))
+  :version "unreleased"
+  :serial t
+  :depends-on (:hyperspec-lookup)
+  :components ((:file "package")
+               (:file "utils")
+               (:file "hyperdoc")
+               (:file "registry")))
 
 (defsystem :hyperdoc-test
-    :depends-on (:rt)
-    :components ((:file "hyperdoc-test")))
+  :depends-on (:rt)
+  :components ((:file "hyperdoc-test")))
 
 (defmethod perform ((o test-op) (c (eql (find-system :hyperdoc))))
   (operate 'load-op :hyperdoc-test)
