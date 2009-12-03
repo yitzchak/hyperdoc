@@ -1,0 +1,281 @@
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html> 
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+  <title>HYPERDOC - unreleased</title><style type="text/css">
+  pre { padding:5px; background-color:#e0e0e0 }
+  h3,h4 { text-decoration: underline; }
+  a { text-decoration: none; padding: 1px 2px 1px 2px; }
+  a:visited { text-decoration: none; padding: 1px 2px 1px 2px; }
+  a:hover { text-decoration: none; padding: 1px 1px 1px 1px; border: 1px solid #000000; } 
+  a:focus { text-decoration: none; padding: 1px 2px 1px 2px; border: none; }
+  a.none { text-decoration: none; padding: 0; }
+  a.none:visited { text-decoration: none; padding: 0; } 
+  a.none:hover { text-decoration: none; border: none; padding: 0; } 
+  a.none:focus { text-decoration: none; border: none; padding: 0; } 
+  a.noborder { text-decoration: none; padding: 0; } 
+  a.noborder:visited { text-decoration: none; padding: 0; } 
+  a.noborder:hover { text-decoration: none; border: none; padding: 0; } 
+  a.noborder:focus { text-decoration: none; border: none; padding: 0; }  
+  pre.none { padding:5px; background-color:#ffffff }
+  </style>
+</head>
+
+<body bgcolor=white>
+
+<h2> HYPERDOC - unreleased</h2>
+
+<h5>&nbsp;&nbsp;&nbsp;&nbsp; by Tobias C Ritweiler </h5>
+
+<font color=red>Repository:</font> <br>&nbsp;<br>
+
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <code>darcs get http://common-lisp.net/project/editor-hints/darcs/hyperdoc/</code>
+<br>&nbsp;<br><h3><a class=none name="contents">Contents</a></h3>
+<ol>
+  <li> <a href="#what_is_hyperdoc?">What is Hyperdoc?</a>
+  <li> <a href="#notes_on_the_api">Notes on the API</a>
+  <li> <a href="#limitations">Limitations</a>
+  <li> <a href="#usage_(ide_user)">Usage (IDE User)</a>
+  <li> <a href="#usage_(ide_hacker)">Usage (IDE Hacker)</a>
+  <li> <a href="#usage_(library_hacker)">Usage (Library Hacker)</a>
+  <li> <a href="#advanced_usage:_documentation_type_normalization">Advanced Usage: Documentation Type Normalization</a>
+  <li> <a href="#advanced_usage:_documentation_type_filtering">Advanced Usage: Documentation Type Filtering</a>
+  <li> <a href="#advanced_usage:_extra_documentation_types">Advanced Usage: Extra Documentation Types</a>
+
+
+    <li><a href="#dictionary">Dictionary</a>
+    <ol>
+    <li><a href="#*documentation-types*"><code>*DOCUMENTATION-TYPES*</code></a>
+    <li><a href="#lookup"><code>LOOKUP</code></a>
+    <li><a href="#register-documentation"><code>REGISTER-DOCUMENTATION</code></a>
+
+    </ol>
+</ol> <br>&nbsp;<br><h3><a class=none name="what_is_hyperdoc?">What is Hyperdoc?</a></h3>
+&nbsp; &nbsp; Hyperdoc is a hypertext documentation support system for Common Lisp, licensed under a MIT-style <br> &nbsp; &nbsp; license. Basically, it takes a symbol and outputs a <code>URL</code> to that symbol&#039;s documentation.
+<br><br>
+
+&nbsp; &nbsp; It&#039;s supposed to be used a) by Common Lisp development environments to provide arbitrary <br> &nbsp; &nbsp; documentation look up on key press, and b) by library authors to make their library&#039;s <br> &nbsp; &nbsp; documentation conveniently available to users of their library.
+<br>&nbsp;<br><h3><a class=none name="notes_on_the_api">Notes on the API</a></h3>
+&nbsp; &nbsp; Although we have made Hyperdoc available to the public, We do not consider it to be released yet. <br> &nbsp; &nbsp; The effective difference between these two states is that you won&#039;t get any guarantee from us <br> &nbsp; &nbsp; regarding backwards-incompatible changes <code><a href="http://www.lispworks.com/reference/HyperSpec/Body/a__.htm"><code>-</code></a>-</code> although we&#039;ll try to avoid them, such changes may <br> &nbsp; &nbsp; turn out to be necessary to overcome current limitations of Hyperdoc.
+<br>&nbsp;<br><h3><a class=none name="limitations">Limitations</a></h3>
+&nbsp; &nbsp; Hyperdoc currently only supports introspective lookup of documentation <code><a href="http://www.lispworks.com/reference/HyperSpec/Body/a__.htm"><code>-</code></a>-</code> this means that the <br> &nbsp; &nbsp; symbols you want to inquire documentation for must be loaded into the running Lisp image (along <br> &nbsp; &nbsp; their respective packages, of course.)
+<br><br>
+
+&nbsp; &nbsp; In particular, generating a static indexing for all symbols of a package to avoid the necessity of <br> &nbsp; &nbsp; introspection is not currently supported. Likewise, downloading documentation to the hard disk for <br> &nbsp; &nbsp; offline usage is not supported either.
+<br><br>
+
+&nbsp; &nbsp; The reason behind these restrictions is that personally, we can live with an introspective, online <br> &nbsp; &nbsp; facility for now. Patches are welcome, of course. (In fact, it may be a nice down-to-the-earth <br> &nbsp; &nbsp; project to use Drakma and Montezuma for this purpose.)
+<br>&nbsp;<br><h3><a class=none name="usage_(ide_user)">Usage (IDE User)</a></h3>
+&nbsp; &nbsp; You only have to download Hyperdoc, and link its .asd file to ASDF&#039;s central-registry; your <br> &nbsp; &nbsp; development environment should actually care for the rest. (If it doesn&#039;t, pleaser refer the <br> &nbsp; &nbsp; respective authors to this document and nicely ask them to add support for Hyperdoc.)
+<br><br>
+
+&nbsp; &nbsp; In case you&#039;re using Slime, you have to enable the slime-hyperdoc contrib (or the slime-fancy <br> &nbsp; &nbsp; meta contrib), and the key combination &quot;C-c C-d h&quot; will inquire Hyperdoc about the symbol <br> &nbsp; &nbsp; at your cursor&#039;s position.
+<br>&nbsp;<br><h3><a class=none name="usage_(ide_hacker)">Usage (IDE Hacker)</a></h3>
+&nbsp; &nbsp; All you have to do is call out to <code><a href="#lookup"><code>LOOKUP</code></a></code> on key press. Notice that it may return multiple URLs, <br> &nbsp; &nbsp; you have to decide how to handle them. You should probably call <code><a href="#lookup"><code>LOOKUP</code></a></code> with the current buffer <br> &nbsp; &nbsp; package as first argument <code><a href="http://www.lispworks.com/reference/HyperSpec/Body/a__.htm"><code>-</code></a>-</code> except if the symbol is explicitly qualified.
+<br>&nbsp;<br><h3><a class=none name="usage_(library_hacker)">Usage (Library Hacker)</a></h3>
+&nbsp; &nbsp; Registering your project&#039;s documentation to Hyperdoc is very easy. Depending on how <br> &nbsp; &nbsp; complicated the linking scheme of your documentation generation tool is, the efforts range from <br> &nbsp; &nbsp; being straightforward to being a bit more involved.
+<br><br>
+
+&nbsp; &nbsp; You have to perform the following steps:
+<ul>
+  &nbsp; &nbsp; &nbsp; &nbsp; <li>Your <code>ASDF</code> system should depend on Hyperdoc weakly by means of the <code>:WEAKLY-DEPENDS-ON</code> option <br> of <code>DEFSYSTEM.</code> A weak dependency will only be loaded if the depended system is actually <br> installed at the user&#039;s site.</li>
+  &nbsp; &nbsp; &nbsp; &nbsp; <li>You should include a call to <code><a href="#register-documentation"><code>REGISTER-DOCUMENTATION</code></a></code> (reader-conditionalized on the <code>:HYPERDOC</code> <br> feature) somewhere in your sources:</li>
+  &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <pre>
+       #+hyperdoc (hyperdoc:register-documentation :foo ...)
+</pre>
+
+  &nbsp; &nbsp; &nbsp; &nbsp; <li>In the call to <code><a href="#register-documentation"><code>REGISTER-DOCUMENTATION</code></a>,</code> you have to specify the base (or root) <code>URL</code> that all <br> your documentation entries share, and a function which, given a symbol, computes the remaining <br> part to complement the <code>URL.</code></li>
+</ul>
+&nbsp; &nbsp; For example, registering documentation that has been created via Edi Weitz&#039; <br> &nbsp; &nbsp; Documentation-Tool is trivial:
+<pre>
+   (defvar *ediware*
+     &#039;(:capi-overview
+       :chunga
+       :cl-dongle
+       :cl-fad
+       ;; ...
+       ))
+  
+   (dolist (package *ediware*)
+     (register-documentation package
+       :base-uri (format nil &quot;http://weitz.de/~(~A~)/&quot; package)
+       :relative-uri-function (formatter &quot;#~(~A~)&quot;)))
+</pre>
+
+&nbsp; &nbsp; Notice how first an <i><a href="http://www.lispworks.com/documentation/HyperSpec/Body/26_glo_o.htm#output">output</a></i> <i><a href="http://www.lispworks.com/documentation/HyperSpec/Body/26_glo_s.htm#string_stream">string stream</a></i>, then the symbol being looked up, and then the <br> &nbsp; &nbsp; desired documentation type is passed to <i>relative-uri-function</i> <code><a href="http://www.lispworks.com/reference/HyperSpec/Body/a__.htm"><code>-</code></a>-</code> as you can see, this makes <br> &nbsp; &nbsp; it viable to concisely specify everything that is needed by using <code><a href="http://www.lispworks.com/reference/HyperSpec/Body/m_format.htm"><code>FORMATTER</code></a></code> in trivial cases.
+<br><br>
+
+&nbsp; &nbsp; <code><a href="#register-documentation"><code>REGISTER-DOCUMENTATION</code></a></code> provides additional means to customize the lookup process. The next two <br> &nbsp; &nbsp; sections will discuss them.
+<br>&nbsp;<br><h3><a class=none name="advanced_usage:_documentation_type_normalization">Advanced Usage: Documentation Type Normalization</a></h3>
+&nbsp; &nbsp; As symbols can denote multiple entities (Lisp-N ftw!), some documentation tools generate html <br> &nbsp; &nbsp; anchors with a prefix to distcriminate between different entities. For example, let&#039;s assume <br> &nbsp; &nbsp; your documentation tool generates anchors like &quot;#function:symbol-name&quot;, or <br> &nbsp; &nbsp; &quot;#variable:symbol-name&quot;. For that purpose, the <i>relative-uri-function</i> is called <br> &nbsp; &nbsp; with a documentation type as third argument that describes what entity is currently involved.
+<br><br>
+
+&nbsp; &nbsp; However, the documentation type that is passed is very specific. For example, Hyperdoc <br> &nbsp; &nbsp; distinguishes between <code>:FUNCTION</code> and <code>:GENERIC-FUNCTION</code> even though your documentation tool may <br> &nbsp; &nbsp; coalesce these two. (See <code><a href="#*documentation-types*"><code>*DOCUMENTATION-TYPES*</code></a>)</code>
+<br><br>
+
+&nbsp; &nbsp; In that case you&#039;d have to write
+<pre>
+   (register-documentation :foo
+     :base-uri &quot;http://foo.com/&quot;
+     :relative-uri-function
+     #&#039;(lambda (stream symbol type)
+         (format stream &quot;#~(~A~):~(~A~)&quot;
+                 (case type
+                   ((:function :generic-function) :function)
+                   ;; ...
+                   )
+                 symbol)))
+</pre>
+
+&nbsp; &nbsp; As that case may be quite common, you can actually write
+<pre>
+   (register-documentation :foo
+     :base-uri &quot;http://foo.com/&quot;
+     :relative-uri-function (formatter &quot;#~(~*~A~):~(~@*~A~)&quot;)
+     :normalize-types-function
+     #&#039;(lambda (type)
+         (case type
+           ((:function :generic-function) :function)
+           ;; ...
+          )))
+</pre>
+
+&nbsp; &nbsp; Of course, the elegance of the <code><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_format.htm"><code>FORMAT</code></a></code> noise is in the eye of the beholder.
+<br>&nbsp;<br><h3><a class=none name="advanced_usage:_documentation_type_filtering">Advanced Usage: Documentation Type Filtering</a></h3>
+&nbsp; &nbsp; When a <i>normalize-types-function</i> returns <code>NIL</code> for a type, the <i>relative-uri-function</i> <br> &nbsp; &nbsp; won&#039;t be invoked for that type.
+<br>&nbsp;<br><h3><a class=none name="advanced_usage:_extra_documentation_types">Advanced Usage: Extra Documentation Types</a></h3>
+&nbsp; &nbsp; The <code><a href="#lookup"><code>LOOKUP</code></a></code> function determines all valid documentation types for the passed symbol before it <br> &nbsp; &nbsp; invokes <i>relative-uri-function</i> for each determined type. (See <code><a href="#*documentation-types*"><code>*DOCUMENTATION-TYPES*</code></a>)</code>
+<br><br>
+
+&nbsp; &nbsp; You may want to extend the determination process.
+<br><br>
+
+&nbsp; &nbsp; For example, let&#039;s say you have a package <code>ASSEM</code> which includes symbols that denote <br> &nbsp; &nbsp; instructions. The instructions are just symbols, in particular they&#039;re not represented by <br> &nbsp; &nbsp; macros, functions, or anything else (for instance they may only be hashes into some internal <br> &nbsp; &nbsp; hash-table.) In that case, you&#039;d do the following:
+<pre>
+   (register-documentation :assem
+     :base-uri &quot;http://asmreference.invalid/&quot;
+     :relative-uri-function (formatter &quot;instructions.php&amp;op=~A&quot;)
+     :extra-types-function
+     #&#039;(lambda (symbol) (and (member symbol *ops*) &#039;(:instruction)))
+     :normalize-types-function
+     #&#039;(lambda (type) (and (eq type :instruction) :instruction))) ; filter
+</pre>
+
+&nbsp; &nbsp; If the instruction symbols are not exported from <code>ASSEM,</code> you&#039;d have to add an <code>:ALL-SYMBOLS</code> <code>T.</code>
+<br>&nbsp;<br>
+<br>&nbsp;<br><h3><a class=none name="dictionary">Dictionary</a></h3>
+
+
+<!-- Entry for *DOCUMENTATION-TYPES* -->
+
+<p><br>[Special variable]<br><a class=none name='*documentation-types*'><b>*documentation-types*</b></a><br><br>&nbsp;&nbsp;Initial Value:
+<pre>
+    (:SYMBOL-MACRO :MACRO :CONDITION :METHOD :GENERIC-FUNCTION :CLASS :TYPE
+     :FUNCTION :COMPILER-MACRO :SETF :METHOD-COMBINATION :TYPE :STRUCTURE :PACKAGE
+     :VARIABLE :CONSTANT)
+</pre>
+<br>&nbsp;&nbsp;Description:
+<blockquote>
+
+Documentation types used by Hyperdoc. These correspond to what <code><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_docume.htm"><code>DOCUMENTATION</code></a></code> uses with a few <br> additions.
+
+
+</blockquote>
+
+<!-- End of entry for *DOCUMENTATION-TYPES* -->
+
+
+<!-- Entry for LOOKUP -->
+
+<p><br>[Function]<br><a class=none name='lookup'><b>lookup</b> <i>package-designator symbol-name <tt>&amp;optional</tt> doc-types</i> =&gt; <i>result</i></a>
+<br><br>&nbsp;&nbsp;Argument and Values:
+    <blockquote><i>package-designator</i>: <code>(<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_or.htm"><code>OR</code></a> 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_pkg.htm"><code>PACKAGE</code></a> 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm"><code>SYMBOL</code></a> 
+(<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_vector.htm"><code>VECTOR</code></a> 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_ch.htm"><code>CHARACTER</code></a>) 
+(<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_vector.htm"><code>VECTOR</code></a> 
+NIL) 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_base_s.htm"><code>BASE-STRING</code></a>)</code></blockquote>
+    <blockquote><i>symbol-name</i>: <code><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_string.htm"><code>STRING</code></a></code></blockquote>
+    <blockquote><i>doc-types</i>: <code>(<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_or.htm"><code>OR</code></a> 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm"><code>SYMBOL</code></a> 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_cons.htm"><code>CONS</code></a>)</code></blockquote>
+    <blockquote><i>result</i>: <code><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_list.htm"><code>LIST</code></a></code></blockquote>&nbsp;&nbsp;Description:
+<blockquote>
+
+Looks up documentation for symbol named by <i>symbol-name</i> in the package designated by <br> <i>package-designator</i>, or any package in its <code><a href="http://www.lispworks.com/reference/HyperSpec/Body/f_pkg_us.htm"><code>PACKAGE-USE-LIST</code></a>.</code>
+<br><br>
+
+<i>doc-types</i> may either be a symbol, or a list of symbols. If <i>doc-types</i> are given, the <br> lookup is restricted to documentation of the entities associated with the given <i>doc-types</i>.
+<br><br>
+
+<i>doc-types</i> default to <code><a href="#*documentation-types*"><code>*DOCUMENTATION-TYPES*</code></a>.</code>
+<br><br>
+
+<code><a href="#lookup"><code>LOOKUP</code></a></code> returns a list of applicable <code>(DOC-TYPE</code> . <code>URI-STRING)</code> pairs.
+<br><br>
+
+If the designated package does not exist, or if no the designated symbol does not exist, or if no <br> documentation for the designated symbol is found, <code>NIL</code> is returned.
+
+
+</blockquote>
+
+<!-- End of entry for LOOKUP -->
+
+
+<!-- Entry for REGISTER-DOCUMENTATION -->
+
+<p><br>[Function]<br><a class=none name='register-documentation'><b>register-documentation</b> <i>packages <tt>&amp;rest</tt> keys <tt>&amp;key</tt> base-uri relative-uri-function extra-types-function normalize-types-function all-symbols <tt>&amp;allow-other-keys</tt></i> =&gt; <i>result</i></a>
+<br><br>&nbsp;&nbsp;Argument and Values:
+    <blockquote><i>packages</i>: <code>(<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_or.htm"><code>OR</code></a> 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm"><code>SYMBOL</code></a> 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_pkg.htm"><code>PACKAGE</code></a> 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_cons.htm"><code>CONS</code></a>)</code></blockquote>
+    <blockquote><i>keys</i>: <code>T</code></blockquote>
+    <blockquote><i>base-uri</i>: <code><a href="http://www.lispworks.com/reference/HyperSpec/Body/a_string.htm"><code>STRING</code></a></code></blockquote>
+    <blockquote><i>relative-uri-function</i>: <code>(<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_or.htm"><code>OR</code></a> 
+(<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_and.htm"><code>AND</code></a> 
+(<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_not.htm"><code>NOT</code></a> 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_null.htm"><code>NULL</code></a>) 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm"><code>SYMBOL</code></a>) 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_fn.htm"><code>FUNCTION</code></a>)</code></blockquote>
+    <blockquote><i>extra-types-function</i>: <code>(<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_or.htm"><code>OR</code></a> 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm"><code>SYMBOL</code></a> 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_fn.htm"><code>FUNCTION</code></a>)</code></blockquote>
+    <blockquote><i>normalize-types-function</i>: <code>(<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_or.htm"><code>OR</code></a> 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/t_symbol.htm"><code>SYMBOL</code></a> 
+<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_fn.htm"><code>FUNCTION</code></a>)</code></blockquote>
+    <blockquote><i>all-symbols</i>: <code><a href="http://www.lispworks.com/reference/HyperSpec/Body/t_ban.htm"><code>BOOLEAN</code></a></code></blockquote>
+    <blockquote><i>result</i>: <code>(<a href="http://www.lispworks.com/reference/HyperSpec/Body/a_member.htm"><code>MEMBER</code></a> 
+T)</code></blockquote>&nbsp;&nbsp;Description:
+<blockquote>
+
+<pre>
+  packages      ::= package-designator | (package-designators+)
+  keys          ::= { :BASE-URI                 string
+                      :RELATIVE-URI-FUNCTION    function-designator
+                    [ :EXTRA-TYPES-FUNCTION     function-designator ]
+                    [ :NORMALIZE-TYPES-FUNCTION function-designator ]
+                    [ :ALL-SYMBOLS              boolean             ] }+
+</pre>
+
+
+
+</blockquote>
+
+<!-- End of entry for REGISTER-DOCUMENTATION -->
+
+
+<hr>
+<p>
+This documentation was generated on 2009-12-3 from a Lisp image using some home-brewn,
+duct-taped, <br> evolutionary hacked extension of Edi Weitz' 
+<a href="http://weitz.de/documentation-template/">DOCUMENTATION-TEMPLATE</a>.
+</p>
+
+</body>
+</html>
